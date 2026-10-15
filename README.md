@@ -36,6 +36,23 @@ docker compose run --rm s2veg s2veg run --config configs/madrid.toml --out outpu
 `s2veg access-demo` measures this instead of asserting it: same pixels over HTTPS and S3,
 bucket access without credentials, COG vs JP2 timing, and the radiometric-offset check.
 
+## Sentinel Hub (OAuth2 client credentials)
+
+The Process API authenticates with **OAuth2 client credentials**: no browser login; you exchange a
+client id and secret for a short-lived bearer token (a JWT) and send it in `Authorization: Bearer`.
+Request one token and reuse it: token requests are rate-limited.
+
+1. Create an OAuth client: Dashboard → *User settings* → *OAuth clients* → *Create*. The secret is shown
+   **once**; copy it then.
+   - Planet Sentinel Hub: <https://apps.sentinel-hub.com/dashboard> (`SH_PROVIDER=sentinelhub`)
+   - Copernicus Data Space (free): <https://shapps.dataspace.copernicus.eu/dashboard> (`SH_PROVIDER=cdse`)
+2. `cp .env.example .env` and fill `SH_PROVIDER`, `SH_CLIENT_ID`, `SH_CLIENT_SECRET` (`.env` is git-ignored).
+3. `docker compose run --rm s2veg s2veg hub-token` checks authentication only and never prints secrets.
+4. `docker compose run --rm s2veg s2veg hub-fetch --config configs/madrid.toml --start 2024-03-01 --end 2024-03-31`
+
+Token endpoints come from the official docs; the Process API call itself has not yet been run against a
+real account in this project.
+
 ## Pipeline
 
 ```

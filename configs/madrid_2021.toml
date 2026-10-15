@@ -1,0 +1,34 @@
+# Same AOI as madrid.toml, but imagery from 2021: the reference year of ESA WorldCover v200.
+# This removes the 3-year gap between reference and imagery, so disagreements are easier to
+# attribute to phenology and to the method rather than to real land-cover change.
+# (WorldCover v200 is built from Sentinel-1/2 data of 2021.)
+
+[aoi]
+name = "madrid_2021"
+bbox = [-3.80, 40.37, -3.62, 40.48]
+
+[time]
+start = "2021-03-01"
+end = "2021-09-30"
+
+[search]
+stac_url = "https://earth-search.aws.element84.com/v1"
+collection = "sentinel-2-l2a"
+access = "https"
+max_scene_cloud = 80
+
+[processing]
+scl_valid = [4, 5, 6, 7]
+min_valid_fraction = 0.6
+max_scenes_per_month = 4
+
+[clustering]
+features = ["ndvi", "ndwi", "red", "nir"]
+k = 5
+sample_size = 200000
+seed = 42
+
+[validation]
+enabled = true
+ndvi_threshold = 0.3
+vegetation_classes = [10, 20, 30, 40]

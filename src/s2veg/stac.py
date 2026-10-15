@@ -54,6 +54,29 @@ def covering_items(items: Sequence[pystac.Item], bbox: tuple[float, float, float
     return [it for it in covering if tile_key(it) == best]
 
 
+def _baseline(item: pystac.Item) -> float:
+    try:
+        return float(item.properties.get("s2:processing_baseline", "0"))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def deduplicate_acquisitions(items: Sequence[pystac.Item]) -> list[pystac.Item]:
+    """One scene per (satellite, date): keep the most recent processing baseline.
+
+    The archive holds the same acquisition more than once when ESA reprocessed it (e.g.
+    2021 scenes exist as baseline 03.00 AND as reprocessed 05.00). Feeding both into a
+    composite would double-count that date and mix two processor versions.
+    """
+    best: dict[tuple, tuple[tuple, pystac.Item]] = {}
+    for it in items:
+        key = (it.properties.get("platform"), it.datetime.date())
+        rank = (_baseline(it), str(it.properties.get("updated", "")))
+        if key not in best or rank > best[key][0]:
+            best[key] = (rank, it)
+    return sorted((v[1] for v in best.values()), key=lambda i: i.datetime)
+
+
 def asset_href(item: pystac.Item, key: str, access: str = "https") -> str:
     href = item.assets[key].href
     return https_to_s3(href) if access == "s3" else href

@@ -26,8 +26,27 @@ import rasterio
 import requests
 from rasterio.warp import transform_bounds
 
-TOKEN_URL = "https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token"
-PROCESS_URL = "https://services.sentinel-hub.com/api/v1/process"
+# Sentinel Hub is offered by two providers with separate accounts and separate OAuth clients.
+# Token endpoints below are from the official docs (docs.sentinel-hub.com and
+# documentation.dataspace.copernicus.eu). The Process API paths follow the same pattern;
+# the CDSE one has not been exercised by this project yet.
+PROVIDERS = {
+    "sentinelhub": {   # Planet's commercial service (free trial, then paid)
+        "token_url": "https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token",
+        "process_url": "https://services.sentinel-hub.com/api/v1/process",
+    },
+    "cdse": {          # Copernicus Data Space Ecosystem (free for registered users)
+        "token_url": "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+        "process_url": "https://sh.dataspace.copernicus.eu/api/v1/process",
+    },
+}
+
+
+def provider_urls() -> dict[str, str]:
+    name = os.getenv("SH_PROVIDER", "sentinelhub").lower()
+    if name not in PROVIDERS:
+        raise RuntimeError(f"SH_PROVIDER must be one of {sorted(PROVIDERS)}, got '{name}'")
+    return PROVIDERS[name]
 
 EVALSCRIPT = """//VERSION=3
 function setup() {
@@ -83,24 +102,58 @@ def build_request(bbox: tuple[float, float, float, float], start: str, end: str,
     }
 
 
+def credentials() -> tuple[str, str]:
+    client_id, client_secret = os.getenv("SH_CLIENT_ID"), os.getenv("SH_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise RuntimeError("Set SH_CLIENT_ID and SH_CLIENT_SECRET in .env (see README, 'Sentinel Hub').")
+    return client_id, client_secret
+
+
 def get_token(client_id: str, client_secret: str) -> str:
+    """OAuth2 *client credentials* flow: machine-to-machine, no user login or browser.
+
+    You exchange (client_id, client_secret) for a short-lived bearer token (a JWT) and send it
+    as `Authorization: Bearer <token>`. Request ONE token and reuse it until it expires:
+    token requests are rate-limited (HTTP 429) per the docs.
+    """
     resp = requests.post(
-        TOKEN_URL,
+        provider_urls()["token_url"],
         data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
         timeout=30,
     )
-    resp.raise_for_status()  # fail loudly: the first version called .json()["access_token"] blindly
+    if resp.status_code != 200:
+        hint = {400: "malformed request or wrong grant type", 401: "wrong client id/secret, or the client expired",
+                429: "too many token requests; reuse the token"}.get(resp.status_code, "see response")
+        raise RuntimeError(f"token request failed: HTTP {resp.status_code} ({hint}): {resp.text[:200]}")
     return resp.json()["access_token"]
 
 
-def fetch(bbox: tuple[float, float, float, float], start: str, end: str, out_path: str | Path) -> Path:
-    client_id, client_secret = os.getenv("SH_CLIENT_ID"), os.getenv("SH_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        raise RuntimeError("Set SH_CLIENT_ID and SH_CLIENT_SECRET (e.g. in .env) to use Sentinel Hub.")
+def describe_token(token: str) -> dict:
+    """Decode (WITHOUT verifying) the JWT payload to show when it expires. Never prints the token."""
+    import base64
+    import json
+    from datetime import datetime, timezone
 
-    token = get_token(client_id, client_secret)
+    payload_b64 = token.split(".")[1]
+    payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4)))
+    exp = payload.get("exp")
+    return {
+        "issuer": payload.get("iss"),
+        "expires_utc": datetime.fromtimestamp(exp, tz=timezone.utc).isoformat() if exp else None,
+        "lifetime_s": (exp - payload["iat"]) if exp and "iat" in payload else None,
+    }
+
+
+def check_auth() -> dict:
+    """Authenticate only. Cheap way to debug OAuth before sending any data request."""
+    token = get_token(*credentials())
+    return describe_token(token)
+
+
+def fetch(bbox: tuple[float, float, float, float], start: str, end: str, out_path: str | Path) -> Path:
+    token = get_token(*credentials())
     resp = requests.post(
-        PROCESS_URL, json=build_request(bbox, start, end),
+        provider_urls()["process_url"], json=build_request(bbox, start, end),
         headers={"Authorization": f"Bearer {token}", "Accept": "image/tiff"}, timeout=120,
     )
     resp.raise_for_status()

@@ -23,6 +23,8 @@ def main(argv: list[str] | None = None) -> int:
         if name == "run":
             p.add_argument("--out", default="outputs")
 
+    sub.add_parser("hub-token", help="test Sentinel Hub OAuth only (no data request, secrets not printed)")
+
     hub = sub.add_parser("hub-fetch", help="download an L2A cut-out with Sentinel Hub Process API")
     hub.add_argument("--config", required=True)
     hub.add_argument("--start", required=True, help="YYYY-MM-DD")
@@ -30,13 +32,21 @@ def main(argv: list[str] | None = None) -> int:
     hub.add_argument("--out", default="outputs/hub_cutout.tif")
 
     args = parser.parse_args(argv)
+    if args.command == "hub-token":
+        from .hub import check_auth
+        info = check_auth()
+        print("OAuth OK. Token details (the token itself is never printed):")
+        for k, v in info.items():
+            print(f"  {k}: {v}")
+        return 0
     cfg = load_config(args.config)
 
     if args.command == "search":
-        from .stac import covering_items, search_items
+        from .stac import covering_items, deduplicate_acquisitions, search_items
         found = search_items(cfg)
-        items = covering_items(found, cfg.bbox)
-        print(f"{len(found)} matched, {len(items)} cover the AOI\n")
+        covering = covering_items(found, cfg.bbox)
+        items = deduplicate_acquisitions(covering)
+        print(f"{len(found)} matched, {len(covering)} cover the AOI, {len(items)} unique acquisitions\n")
         print(f"{'id':<30s} {'tile cloud %':>12s} {'nodata %':>9s} {'baseline':>9s}")
         for it in items:
             p = it.properties

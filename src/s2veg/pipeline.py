@@ -24,8 +24,8 @@ from .indices import mask_outside, scene_indices
 from .raster import Grid, grid_for_aoi, read_on_grid, write_geotiff
 from .reflectance import check_reflectance_scale, dn_to_reflectance
 from .scl import valid_mask
-from .stac import (asset_grid_info, asset_href, covering_items, reflectance_scale_offset,
-                   search_items)
+from .stac import (asset_grid_info, asset_href, covering_items, deduplicate_acquisitions,
+                   reflectance_scale_offset, search_items)
 from .validation import (WORLDCOVER_CLASSES, binary_metrics, per_class_table,
                          read_worldcover, worldcover_href)
 
@@ -90,8 +90,10 @@ def run(cfg: Config, out_root: str | Path, log=print) -> Path:
 
     # 1. Discover scenes -------------------------------------------------------------
     found = search_items(cfg)
-    items = covering_items(found, cfg.bbox)
-    log(f"STAC: {len(found)} scenes matched, {len(items)} fully cover the AOI (single tile)")
+    covering = covering_items(found, cfg.bbox)
+    items = deduplicate_acquisitions(covering)
+    log(f"STAC: {len(found)} scenes matched, {len(covering)} fully cover the AOI (single tile), "
+        f"{len(items)} unique acquisitions after dropping {len(covering) - len(items)} reprocessed duplicates")
     if not items:
         raise RuntimeError("no scene covers the AOI; widen the dates or the cloud pre-filter")
 
