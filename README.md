@@ -14,7 +14,7 @@ operational or scientifically validated product. See [Limitations](#limitations)
 |---|---|---|
 | Hardcoded tile `30/T/YN` (Madrid is `30TVK`) | The S3 route never covered Madrid | Scenes come from a STAC search over the AOI; the grid comes from product metadata |
 | Bands read by array position; S3 wrote B,G,R,NIR, Hub wrote R,G,B,NIR | NDVI/EVI computed on the wrong bands for one source | Bands are addressed by **name**; test shuffles the order |
-| Raw DN fed into EVI (`+1` assumes reflectance 0..1); Hub default `sampleType` is 8-bit | EVI max of 85 and 25,925 in the committed CSVs | `scale`/`offset` read from metadata; a guard rejects data that is not reflectance; Hub request pins `FLOAT32` |
+| Raw DN fed into EVI (`+1` assumes reflectance 0..1); Hub default `sampleType` (`AUTO`) is, per its docs, 8-bit 0..255 (hypothesis, consistent with the numbers) | EVI max of 85 and 25,925 in the committed CSVs | `scale`/`offset` read from metadata; a guard rejects data that is not reflectance; Hub request pins `FLOAT32` |
 | No cloud/shadow mask (`maxCloudCoverage` is per **scene**, 100x100 km) | Clouds entered the NDVI | SCL mask per pixel; scenes filtered by **valid fraction of the AOI** |
 | 512x512 pixels over an arbitrary bbox | Non-square, resampled pixels; `resolution=10` unused | One explicit 10 m grid, snapped to the 20 m SCL grid |
 | K-means on NDVI alone, called a "classification" | Histogram slicing, not land cover | Multi-feature, standardised, seeded; labelled exploratory; compared to a reference |
