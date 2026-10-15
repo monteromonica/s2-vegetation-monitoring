@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+
+# Data and outputs are reproducible from code + config; never commit rasters.
+data/raw/
+data/cache/
+outputs/
+*.tif
+*.tiff
+*.jp2

@@ -1,0 +1,32 @@
+# Madrid: Casa de Campo, Parque del Retiro, Madrid Rio and the surrounding urban fabric.
+# ~15 x 12 km, i.e. ~1500 x 1200 pixels at 10 m. Fits inside one MGRS tile (30TVK).
+
+[aoi]
+name = "madrid"
+bbox = [-3.80, 40.37, -3.62, 40.48]   # lon_min, lat_min, lon_max, lat_max (WGS84)
+
+[time]
+start = "2024-03-01"
+end = "2024-09-30"
+
+[search]
+stac_url = "https://earth-search.aws.element84.com/v1"
+collection = "sentinel-2-l2a"
+access = "https"            # "https" or "s3" (both read the same public COGs)
+max_scene_cloud = 80        # coarse prefilter on the WHOLE tile; the real filter is below
+
+[processing]
+scl_valid = [4, 5, 6, 7]    # SCL classes kept: vegetation, not vegetated, water, unclassified
+min_valid_fraction = 0.6    # skip a scene if less than 60% of the AOI is valid
+max_scenes_per_month = 4
+
+[clustering]
+features = ["ndvi", "ndwi", "red", "nir"]
+k = 5
+sample_size = 200000
+seed = 42
+
+[validation]
+enabled = true
+ndvi_threshold = 0.3        # fixed a priori, NOT tuned on the reference
+vegetation_classes = [10, 20, 30, 40]   # WorldCover: tree, shrub, grass, crop

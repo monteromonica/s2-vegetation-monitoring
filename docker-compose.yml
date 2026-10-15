@@ -1,0 +1,13 @@
+services:
+  s2veg:
+    build: .
+    image: s2veg:dev
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./configs:/app/configs
+      - ./outputs:/app/outputs
+      - ./src:/app/src
+      - ./tests:/app/tests
+    command: ["s2veg", "run", "--config", "configs/madrid.toml", "--out", "outputs"]
