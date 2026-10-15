@@ -7,8 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# rasterio bundles GDAL in its wheel, but the slim base image lacks libexpat (XML parsing).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first so Docker caches this layer until pyproject.toml changes.
-# rasterio ships GDAL inside its manylinux wheel: no system packages needed.
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install -e ".[dev]"

@@ -56,8 +56,8 @@ def test_grid_for_aoi_is_snapped_and_contains_aoi(synthetic_tile):
     from rasterio.warp import transform_bounds
     t = synthetic_tile["transform10"]
     # a window in UTM -> convert to WGS84 bbox
-    west, north = t * (21, 33)
-    east, south = t * (67, 71)
+    west, north = t @ (21, 33)
+    east, south = t @ (67, 71)
     bbox = transform_bounds(synthetic_tile["crs"], "EPSG:4326", west, south, east, north)
     grid = grid_for_aoi(bbox, synthetic_tile["crs"], t, (100, 100), snap=2)
     col0 = round((grid.transform.c - t.c) / 10)

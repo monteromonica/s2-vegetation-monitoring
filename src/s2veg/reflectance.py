@@ -3,8 +3,10 @@
 Sentinel-2 L2A bands are stored as uint16 digital numbers (DN). Physical reflectance is
     reflectance = DN * scale + offset
 Since processing baseline 04.00 (Jan 2022) ESA adds a radiometric offset (BOA_ADD_OFFSET
-= -1000 DN = -0.1 reflectance). We never hardcode these numbers: they are read from the
-product metadata (STAC `raster:bands`) for each asset.
+= -1000 DN = -0.1 reflectance) to the raw JP2 products. Whether a given COPY of the data has
+that offset already applied depends on the provider (see stac.reflectance_scale_offset), so
+scale/offset come from metadata per asset AND the result is checked for physical
+plausibility below. Metadata can be wrong; physics is the final check.
 
 Pure numpy, no I/O, so it is trivially testable.
 """
@@ -21,12 +23,15 @@ def dn_to_reflectance(dn: np.ndarray, scale: float, offset: float, nodata: int =
     return out
 
 
-def check_reflectance_scale(arrays: dict[str, np.ndarray], max_plausible: float = 3.0) -> None:
-    """Fail loudly if the data does not look like reflectance (0..~1).
+def check_reflectance_scale(arrays: dict[str, np.ndarray], max_plausible: float = 3.0,
+                            max_negative_fraction: float = 0.05) -> None:
+    """Fail loudly if the data does not look like surface reflectance.
 
-    This is the guard that would have caught the old bug: EVI has a '+1' that only makes
-    sense for reflectance in 0..1. Fed raw DN (0..10000) or 8-bit values (0..255) it
-    silently returns garbage such as an EVI maximum of 25,925.
+    Two failure modes, both silent without this guard:
+      * Too large (99.9th percentile > ~3): scale missing, or raw DN / 8-bit values. EVI has a
+        '+1' that only makes sense for reflectance in 0..1.
+      * Too many negative values: the radiometric offset was applied twice. A few slightly
+        negative pixels are normal (over-corrected shadows); >5% is not.
     """
     for name, arr in arrays.items():
         finite = arr[np.isfinite(arr)]
@@ -37,4 +42,10 @@ def check_reflectance_scale(arrays: dict[str, np.ndarray], max_plausible: float 
             raise ValueError(
                 f"band '{name}' does not look like reflectance (99.9th percentile = {p999:.1f}). "
                 "Did you forget scale/offset, or read 8-bit/DN data?"
+            )
+        negative = float((finite < -0.01).mean())
+        if negative > max_negative_fraction:
+            raise ValueError(
+                f"band '{name}': {negative:.0%} of pixels have negative reflectance. "
+                "The radiometric offset is probably being applied twice."
             )

@@ -24,7 +24,8 @@ from .indices import mask_outside, scene_indices
 from .raster import Grid, grid_for_aoi, read_on_grid, write_geotiff
 from .reflectance import check_reflectance_scale, dn_to_reflectance
 from .scl import valid_mask
-from .stac import asset_grid_info, asset_href, asset_scale_offset, covering_items, search_items
+from .stac import (asset_grid_info, asset_href, covering_items, reflectance_scale_offset,
+                   search_items)
 from .validation import (WORLDCOVER_CLASSES, binary_metrics, per_class_table,
                          read_worldcover, worldcover_href)
 
@@ -66,7 +67,7 @@ def _load_scene_features(scene: Scene, grid: Grid, cfg: Config) -> tuple[dict[st
     for name, key in BAND_ASSETS.items():
         # Bands are already 10 m on our grid, so no resampling happens here.
         dn = read_on_grid(asset_href(item, key, cfg.access), grid, Resampling.nearest)
-        scale, offset = asset_scale_offset(item, key)
+        scale, offset = reflectance_scale_offset(item, key)
         scale_offset[name] = (scale, offset)
         arr = dn_to_reflectance(dn, scale, offset)
         arr[~scene.valid] = np.nan

@@ -52,6 +52,33 @@ def test_scale_guard_rejects_raw_dn_and_8bit_values():
     check_reflectance_scale({"nir": np.array([0.02, 0.4, 0.9])})  # plausible: no error
 
 
+def test_guard_detects_offset_applied_twice():
+    """Water has red reflectance ~0.03. Subtracting the offset twice makes it ~-0.07."""
+    water_dn = np.full(1000, 350, dtype=np.uint16)                      # ~0.035 reflectance
+    ok = dn_to_reflectance(water_dn, 0.0001, 0.0)
+    twice = dn_to_reflectance(water_dn, 0.0001, -0.1)
+    check_reflectance_scale({"red": ok})                                # fine
+    with pytest.raises(ValueError, match="applied twice"):
+        check_reflectance_scale({"red": twice})
+
+
+def _stac_item(boa_offset_applied):
+    import pystac
+    from datetime import datetime, timezone
+    props = {"earthsearch:boa_offset_applied": boa_offset_applied} if boa_offset_applied is not None else {}
+    item = pystac.Item("x", None, None, datetime(2024, 3, 1, tzinfo=timezone.utc), props)
+    item.add_asset("red", pystac.Asset("https://e/x.tif", extra_fields={
+        "raster:bands": [{"scale": 0.0001, "offset": -0.1}]}))
+    return item
+
+
+def test_effective_offset_respects_provider_flag():
+    from s2veg.stac import reflectance_scale_offset
+    assert reflectance_scale_offset(_stac_item(True), "red") == (0.0001, 0.0)     # already applied
+    assert reflectance_scale_offset(_stac_item(False), "red") == (0.0001, -0.1)   # raw ESA data
+    assert reflectance_scale_offset(_stac_item(None), "red") == (0.0001, -0.1)    # unknown: ESA default
+
+
 def test_indices_do_not_depend_on_band_order():
     """Regression for the original project: S3 wrote B,G,R,NIR and Hub wrote R,G,B,NIR."""
     bands = {k: np.full((2, 2), v, dtype=np.float32)

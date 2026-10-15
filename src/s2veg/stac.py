@@ -45,9 +45,13 @@ def covering_items(items: Sequence[pystac.Item], bbox: tuple[float, float, float
     covering = [it for it in items if shape(it.geometry).contains(aoi)]
     if not covering:
         return []
-    tiles = Counter(it.properties.get("grid:code", it.properties.get("proj:epsg")) for it in covering)
+    def tile_key(it: pystac.Item) -> str:
+        p = it.properties
+        return p.get("grid:code") or f"{p.get('mgrs:utm_zone')}{p.get('mgrs:latitude_band')}{p.get('mgrs:grid_square')}"
+
+    tiles = Counter(tile_key(it) for it in covering)
     best, _ = tiles.most_common(1)[0]
-    return [it for it in covering if it.properties.get("grid:code", it.properties.get("proj:epsg")) == best]
+    return [it for it in covering if tile_key(it) == best]
 
 
 def asset_href(item: pystac.Item, key: str, access: str = "https") -> str:
@@ -56,17 +60,42 @@ def asset_href(item: pystac.Item, key: str, access: str = "https") -> str:
 
 
 def asset_scale_offset(item: pystac.Item, key: str) -> tuple[float, float]:
-    """Scale/offset from the asset metadata. No silent defaults: missing metadata is an error."""
+    """Raw scale/offset advertised in `raster:bands`. No silent defaults: missing is an error."""
     bands = item.assets[key].extra_fields.get("raster:bands")
     if not bands or "scale" not in bands[0] or "offset" not in bands[0]:
         raise KeyError(f"asset '{key}' of {item.id} has no raster:bands scale/offset metadata")
     return float(bands[0]["scale"]), float(bands[0]["offset"])
 
 
+def reflectance_scale_offset(item: pystac.Item, key: str) -> tuple[float, float]:
+    """(scale, offset) to apply to the DN stored in THIS asset.
+
+    Earth Search COGs carry `earthsearch:boa_offset_applied = True`: the provider already
+    subtracted ESA's BOA_ADD_OFFSET (-1000 DN) when writing the COG, yet `raster:bands` still
+    advertises offset -0.1 (the ESA value for raw data). Applying it again subtracts twice.
+    Evidence (see `s2veg access-demo` and tests): COG DN = original JP2 DN - 1000, and with the
+    extra -0.1 about 90% of water pixels get negative red reflectance, which is not physical.
+    """
+    scale, offset = asset_scale_offset(item, key)
+    if item.properties.get("earthsearch:boa_offset_applied") is True:
+        offset = 0.0
+    return scale, offset
+
+
 def asset_grid_info(item: pystac.Item, key: str) -> tuple[CRS, Affine, tuple[int, int]]:
     """CRS, affine transform and (rows, cols) of an asset, straight from STAC metadata."""
-    epsg = item.properties["proj:epsg"]
     fields = item.assets[key].extra_fields
     a, b, c, d, e, f = fields["proj:transform"][:6]
     rows, cols = fields["proj:shape"]
-    return CRS.from_epsg(epsg), Affine(a, b, c, d, e, f), (int(rows), int(cols))
+    return _item_crs(item), Affine(a, b, c, d, e, f), (int(rows), int(cols))
+
+
+def _item_crs(item: pystac.Item) -> CRS:
+    """STAC projection extension v2 uses `proj:code` ('EPSG:32630'); v1 used `proj:epsg` (32630).
+    Catalogues migrate between versions, so accept both."""
+    props = item.properties
+    if "proj:code" in props:
+        return CRS.from_string(props["proj:code"])
+    if "proj:epsg" in props:
+        return CRS.from_epsg(props["proj:epsg"])
+    raise KeyError(f"{item.id}: no proj:code / proj:epsg in item properties")
