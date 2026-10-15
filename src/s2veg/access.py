@@ -18,7 +18,8 @@ from rasterio.enums import Resampling
 
 from .config import Config
 from .raster import grid_for_aoi, https_to_s3, read_on_grid
-from .stac import asset_grid_info, asset_scale_offset, covering_items, search_items
+from .stac import (asset_grid_info, asset_scale_offset, covering_items,
+                   deduplicate_acquisitions, search_items)
 
 
 def _timed(label: str, fn):
@@ -44,7 +45,7 @@ def _jp2_key_with_resolution_folder(stac_key: str) -> str:
 
 
 def run_demo(cfg: Config) -> None:
-    items = covering_items(search_items(cfg), cfg.bbox)
+    items = deduplicate_acquisitions(covering_items(search_items(cfg), cfg.bbox))
     if not items:
         raise RuntimeError("no scene covers the AOI in the configured dates")
     item = items[0]

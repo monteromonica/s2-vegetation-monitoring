@@ -28,8 +28,8 @@ from rasterio.warp import transform_bounds
 
 # Sentinel Hub is offered by two providers with separate accounts and separate OAuth clients.
 # Token endpoints below are from the official docs (docs.sentinel-hub.com and
-# documentation.dataspace.copernicus.eu). The Process API paths follow the same pattern;
-# the CDSE one has not been exercised by this project yet.
+# documentation.dataspace.copernicus.eu). CDSE Process API has been exercised
+# (`s2veg hub-fetch` with SH_PROVIDER=cdse).
 PROVIDERS = {
     "sentinelhub": {   # Planet's commercial service (free trial, then paid)
         "token_url": "https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token",
@@ -167,4 +167,5 @@ def fetch(bbox: tuple[float, float, float, float], start: str, end: str, out_pat
     names = ("blue", "green", "red", "nir")
     for i, n in enumerate(names):
         print(f"{n:5s} min={np.nanmin(data[i]):.4f} max={np.nanmax(data[i]):.4f}  (expect reflectance ~0..1)")
+    print(f"SCL   unique={sorted(np.unique(data[4]).astype(int).tolist())}  (band 5; not reflectance)")
     return out_path

@@ -26,6 +26,7 @@ from .reflectance import check_reflectance_scale, dn_to_reflectance
 from .scl import valid_mask
 from .stac import (asset_grid_info, asset_href, covering_items, deduplicate_acquisitions,
                    reflectance_scale_offset, search_items)
+from .report import plot_class_timeseries, plot_month
 from .validation import (WORLDCOVER_CLASSES, binary_metrics, per_class_table,
                          read_worldcover, worldcover_href)
 
@@ -189,18 +190,20 @@ def run(cfg: Config, out_root: str | Path, log=print) -> Path:
                 ok = finite & (wc != 0)
                 pred_ndvi = ndvi > cfg.vegetation_ndvi_threshold
                 pred_cluster = None
+                cluster_metrics = None
                 if cluster is not None:
                     veg_clusters = cluster.center("ndvi") > cfg.vegetation_ndvi_threshold
                     pred_cluster = np.zeros(ndvi.shape, dtype=bool)
                     has = cluster.labels >= 0
                     pred_cluster[has] = veg_clusters[cluster.labels[has]]
+                    clustered = ok & has
+                    cluster_metrics = binary_metrics(truth[clustered], pred_cluster[clustered])
 
                 validation[month] = {
                     "reference": "ESA WorldCover 2021 v200 (vegetation = classes "
                                  f"{list(cfg.worldcover_vegetation_classes)})",
                     "ndvi_threshold": binary_metrics(truth[ok], pred_ndvi[ok]),
-                    "clusters": binary_metrics(truth[ok & (cluster.labels >= 0)], pred_cluster[ok & (cluster.labels >= 0)])
-                    if cluster is not None else None,
+                    "clusters": cluster_metrics,
                     "per_class": per_class_table(ndvi, wc, pred_ndvi, pred_cluster, ok),
                 }
                 summary["f1_ndvi_threshold"] = validation[month]["ndvi_threshold"]["f1"]
@@ -211,7 +214,6 @@ def run(cfg: Config, out_root: str | Path, log=print) -> Path:
                                                 "mean_ndvi": float(np.mean(ndvi[m])), "pixels": int(m.sum())})
             summary_rows.append(summary)
 
-            from .report import plot_month
             plot_month(out / "figures" / f"{month}_overview.png", grid, comp, cluster, month, len(chosen))
 
     # 7. Tables, time series figure, provenance --------------------------------------
@@ -220,7 +222,6 @@ def run(cfg: Config, out_root: str | Path, log=print) -> Path:
     if class_ndvi_rows:
         df = pd.DataFrame(class_ndvi_rows)
         df.to_csv(out / "ndvi_by_landcover_and_month.csv", index=False)
-        from .report import plot_class_timeseries
         plot_class_timeseries(out / "figures" / "ndvi_by_landcover.png", df)
     (out / "validation.json").write_text(json.dumps(validation, indent=2, default=float))
     (out / "clusters.json").write_text(json.dumps(cluster_info, indent=2, default=float))

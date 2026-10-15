@@ -1,8 +1,9 @@
 """Validation against an independent reference: ESA WorldCover 10 m land cover.
 
 Honest framing (also for the interview):
-  * WorldCover is itself a model product with its own error, and it is for 2021 while the
-    imagery is 2024. It is a *sanity check*, not ground truth.
+  * WorldCover is itself a model product with its own error (map year 2021). It is a
+    *sanity check*, not ground truth. Matching the imagery year (see madrid_2021.toml)
+    removes one mismatch; phenology still dominates the remaining disagreement.
   * Nothing here is trained on WorldCover, so there is no train/test leakage. The
     vegetation decision uses a fixed NDVI threshold chosen a priori, not tuned on labels.
   * Pixel-level agreement is optimistic: neighbouring pixels are spatially autocorrelated,
